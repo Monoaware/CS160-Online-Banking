@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountManagement } from "./account-management";
+import { AtmLocator } from "./atm-locator";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -41,9 +42,13 @@ export default function DashboardPage() {
       <Tabs defaultValue="account" className="w-full">
         <TabsList>
           <TabsTrigger value="account">Account Management</TabsTrigger>
+          <TabsTrigger value="atm">ATM Near Me</TabsTrigger>
         </TabsList>
         <TabsContent value="account">
           <AccountManagement />
+        </TabsContent>
+        <TabsContent value="atm">
+          <AtmLocator />
         </TabsContent>
       </Tabs>
     </div>

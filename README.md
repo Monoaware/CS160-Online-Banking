@@ -71,3 +71,24 @@ Seeded logins (for local testing):
 - manager@example.com / Password123!
 - ava@example.com / Password123!
 - liam@example.com / Password123!
+
+8. Google Maps API Key Setup
+
+To use the ATM locator feature, you need to set up a Google Maps API key:
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the following APIs:
+   - Maps JavaScript API
+   - Places API
+   - Geocoding API
+4. Go to "Credentials" and create an API key
+5. Restrict the API key:
+   - Under "Application restrictions", select "HTTP referrers" and add your domain(s)
+   - Under "API restrictions", select "Restrict key" and choose the APIs you enabled
+6. Add the API key to your `.env.local` file:
+   ```
+   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_api_key_here
+   ```
+
+**Important**: The API key is used for both server-side API calls and client-side map rendering. Make sure to restrict the API key by domain and specific APIs for security.
