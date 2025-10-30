@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { UserMenu } from "./user-menu";
+import { ThemeToggle } from "./theme-toggle";
 import { createClient } from "@/utils/supabase/client";
 import type { UserProfile } from "@/lib/auth";
 
@@ -91,6 +92,7 @@ export function Navbar() {
 
     // Add role-specific items if we have the full profile
     if (userProfile?.role === "bank_manager") {
+      items.push({ href: "/manager", label: "Manager" });
       items.push({ href: "/api-doc", label: "API Docs" });
     }
 
@@ -137,6 +139,7 @@ export function Navbar() {
                 Sign up
               </Link>
             )}
+          <ThemeToggle />
           <UserMenu />
         </div>
       </div>

@@ -19,7 +19,7 @@ export const Amount = z
   .transform((v) => (typeof v === "number" ? String(v) : v.trim()))
   .refine((v) => /^-?\d+(\.\d{1,2})?$/.test(v), "Invalid amount (max 2 dp)")
   .transform((v) => new Decimal(v))
-  .refine((d) => d.gt(0), "Amount must be > 0");
+  .refine((d) => Number(d) > 0, "Amount must be > 0");
 
 // Helper to create a denied transaction record
 export async function createDeniedTransaction(
@@ -87,27 +87,40 @@ export async function createApprovedTransaction(
     idempotency_key?: string | null;
     bill_pay_rule_id?: number;
     transfer_rule_id?: number;
+    external_routing_number?: string;
+    external_account_number?: string;
+    external_nickname?: string;
   },
   successMessage: string,
 ) {
   try {
-    await tx.transaction.create({
+    const transaction = await tx.transaction.create({
       data: {
         ...data,
         status: "approved" as const,
       },
     });
-    return { success: true, message: successMessage };
+    return { success: true, message: successMessage, transaction };
   } catch (e) {
     if (
       data.idempotency_key &&
       e instanceof Prisma.PrismaClientKnownRequestError &&
       e.code === "P2002"
     ) {
+      // If duplicate, find the existing transaction
+      const existing = await findExistingTransaction(tx, {
+        idempotency_key: data.idempotency_key,
+        transaction_type: data.transaction_type,
+        internal_account_id: data.internal_account_id,
+        amount: data.amount,
+        bill_pay_rule_id: data.bill_pay_rule_id,
+        transfer_rule_id: data.transfer_rule_id,
+      });
       return {
         success: true,
         message: `${successMessage} (idempotency key found).`,
         duplicate: true,
+        transaction: existing,
       };
     }
     throw e;

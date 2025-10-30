@@ -2,7 +2,12 @@ import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
+  plugins: [
+    tsconfigPaths({
+      projects: ["./tsconfig.json"],
+      ignoreConfigErrors: true,
+    }),
+  ],
   test: {
     environment: "jsdom",
     globals: true,
@@ -14,6 +19,7 @@ export default defineConfig({
       "**/.open-next/**",
       "**/coverage/**",
       "**/build/**",
+      "**/mobile/**",
     ],
     coverage: {
       provider: "v8",

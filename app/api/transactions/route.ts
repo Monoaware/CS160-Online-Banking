@@ -108,39 +108,64 @@ const TransactionRequestSchema = z.union([
  *                   example: User not onboarded
  */
 export async function GET(request: Request) {
-  const auth = await getAuthUserFromRequest(request);
-  if (!auth.ok) {
-    return new Response(JSON.stringify(auth.body), {
-      headers: { "Content-Type": "application/json" },
-      status: auth.status,
+  try {
+    const auth = await getAuthUserFromRequest(request);
+    if (!auth.ok) {
+      return new Response(JSON.stringify(auth.body), {
+        headers: { "Content-Type": "application/json" },
+        status: auth.status,
+      });
+    }
+
+    const currentUser = await getPrisma().user.findUnique({
+      where: { auth_user_id: auth.supabaseUser.id },
+      include: { internal_accounts: true },
     });
-  }
 
-  const currentUser = await getPrisma().user.findUnique({
-    where: { auth_user_id: auth.supabaseUser.id },
-    include: { internal_accounts: true },
-  });
+    if (!currentUser) {
+      return new Response(JSON.stringify({ message: "User not onboarded" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 404,
+      });
+    }
 
-  if (!currentUser) {
-    return new Response(JSON.stringify({ message: "User not onboarded" }), {
-      headers: { "Content-Type": "application/json" },
-      status: 404,
+    const accountIds = currentUser.internal_accounts.map((acc) => acc.id);
+
+    // Handle case where user has no accounts
+    if (accountIds.length === 0) {
+      return new Response(JSON.stringify({ transactions: [] }), {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "private, no-cache, no-store, must-revalidate",
+        },
+      });
+    }
+
+    const transactions = await getPrisma().transaction.findMany({
+      where: { internal_account_id: { in: accountIds } },
+      orderBy: { created_at: "desc" },
+      take: 10,
     });
+
+    return new Response(JSON.stringify({ transactions }), {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching transactions:", error);
+    return new Response(
+      JSON.stringify({
+        error: "Internal Server Error",
+        message: error instanceof Error ? error.message : String(error),
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 500,
+      },
+    );
   }
-
-  const accountIds = currentUser.internal_accounts.map((acc) => acc.id);
-  const transactions = await getPrisma().transaction.findMany({
-    where: { internal_account_id: { in: accountIds } },
-    orderBy: { created_at: "desc" },
-    take: 10,
-  });
-
-  return new Response(JSON.stringify({ transactions }), {
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "private, no-cache, no-store, must-revalidate",
-    },
-  });
 }
 
 /* ============================================================================================================================
@@ -385,7 +410,7 @@ export async function POST(request: Request) {
     if (!parseResult.success) {
       return json(422, {
         error: "Invalid request body.",
-        details: z.treeifyError(parseResult.error),
+        details: parseResult.error.issues,
       });
     }
     const request_body = parseResult.data;
@@ -423,52 +448,82 @@ export async function POST(request: Request) {
     const prisma = getPrisma();
 
     // Route to appropriate handler
+    let response: Response;
     if (request_body.requested_transaction_type === "deposit") {
-      return await handleDeposit(prisma, request_body, auth, idempotency_key);
-    }
-
-    if (request_body.requested_transaction_type === "withdrawal") {
-      return await handleWithdrawal(
+      response = await handleDeposit(
         prisma,
         request_body,
         auth,
         idempotency_key,
       );
-    }
-
-    if (request_body.requested_transaction_type === "billpay") {
-      return await handleBillPay(prisma, request_body, auth, idempotency_key);
-    }
-
-    if (request_body.requested_transaction_type === "internal_transfer") {
-      return await handleInternalTransfer(
+    } else if (request_body.requested_transaction_type === "withdrawal") {
+      response = await handleWithdrawal(
         prisma,
         request_body,
         auth,
         idempotency_key,
       );
-    }
-
-    if (request_body.requested_transaction_type === "external_transfer") {
+    } else if (request_body.requested_transaction_type === "billpay") {
+      response = await handleBillPay(
+        prisma,
+        request_body,
+        auth,
+        idempotency_key,
+      );
+    } else if (
+      request_body.requested_transaction_type === "internal_transfer"
+    ) {
+      response = await handleInternalTransfer(
+        prisma,
+        request_body,
+        auth,
+        idempotency_key,
+      );
+    } else if (
+      request_body.requested_transaction_type === "external_transfer"
+    ) {
       if ("transfer_rule_id" in request_body) {
-        return await handleExternalOutbound(
+        response = await handleExternalOutbound(
           prisma,
           request_body,
           auth,
           idempotency_key,
         );
       } else {
-        return await handleExternalInbound(
+        response = await handleExternalInbound(
           prisma,
           request_body,
           idempotency_key,
         );
       }
+    } else {
+      return json(500, {
+        error: "Internal Server Error: Unhandled transaction case.",
+      });
     }
 
-    return json(500, {
-      error: "Internal Server Error: Unhandled transaction case.",
-    });
+    // Invalidate cache after successful transaction (200 status)
+    if (response.status === 200 && auth?.ok) {
+      // Get database user ID for cache invalidation
+      const dbUser = await prisma.user.findUnique({
+        where: { auth_user_id: auth.supabaseUser.id },
+        select: { id: true },
+      });
+
+      // Invalidate transactions and accounts cache (balances changed)
+      // Transactions changed, and account balances also changed, so invalidate both
+      const { revalidateTag } = await import("next/cache");
+      await revalidateTag(`user-${auth.supabaseUser.id}`);
+      await revalidateTag(`transactions-${auth.supabaseUser.id}`);
+      await revalidateTag(`accounts-${auth.supabaseUser.id}`);
+      if (dbUser) {
+        await revalidateTag(`user-${dbUser.id}`);
+        await revalidateTag(`transactions-${dbUser.id}`);
+        await revalidateTag(`accounts-${dbUser.id}`);
+      }
+    }
+
+    return response;
   } catch (error) {
     console.error("Error processing transaction:", error);
     return json(500, { error: "Internal Server Error" });
@@ -679,7 +734,11 @@ async function handleBillPay(
     const payee = await tx.billPayPayee.findUnique({
       where: { id: rule.payee_id },
     });
-    if (!payee || !payee.is_active) {
+
+    // Black hole: proceed even if payee doesn't exist or is inactive
+    // This simulates paying to an external account that may not exist
+    if (!payee) {
+      // Payee record not found - this shouldn't happen normally, but handle gracefully
       await createDeniedTransaction(tx, {
         internal_account_id: source.id,
         amount: rule.amount.neg(),
@@ -688,8 +747,11 @@ async function handleBillPay(
         bill_pay_rule_id: rule.id,
         idempotency_key,
       });
-      return json(403, { error: "Forbidden: Payee is inactive." });
+      return json(404, { error: "Payee not found." });
     }
+
+    // Note: We proceed even if payee.is_active is false (black hole support)
+    // The external account may not exist, but we still process the payment
 
     const existing = await findExistingTransaction(tx, {
       idempotency_key,
@@ -745,6 +807,10 @@ async function handleBillPay(
         direction: "outbound",
         bill_pay_rule_id: rule.id,
         idempotency_key,
+        // Include payee info in transaction for black hole tracking
+        external_routing_number: payee.routing_number,
+        external_account_number: payee.account_number,
+        external_nickname: payee.business_name,
       },
       "Bill pay transaction already processed",
     );

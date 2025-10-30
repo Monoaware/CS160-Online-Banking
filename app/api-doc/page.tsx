@@ -60,7 +60,7 @@ export default function ApiDoc() {
   if (error) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg text-red-600">
+        <div className="text-lg text-destructive">
           Error loading API documentation: {error}
         </div>
       </div>

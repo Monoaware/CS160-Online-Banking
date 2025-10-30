@@ -4,13 +4,15 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
 
+COPY prisma ./prisma
+
 RUN corepack enable
 
 RUN pnpm install
 
-RUN pnpm approve-builds -a && pnpm rebuild
+RUN pnpm prisma:generate
 
-RUN pnpm exec wrangler --version
+RUN pnpm approve-builds -a && pnpm rebuild
 
 EXPOSE 3000
 

@@ -98,11 +98,12 @@ describe("Navbar", () => {
       { timeout: 3000 },
     );
 
-    // Customer should not see API Docs link
+    // Customer should not see Manager or API Docs links
+    expect(screen.queryByText("Manager")).not.toBeInTheDocument();
     expect(screen.queryByText("API Docs")).not.toBeInTheDocument();
   });
 
-  it("displays Dashboard and API Docs links for bank_manager role", async () => {
+  it("displays Dashboard, Manager, and API Docs links for bank_manager role", async () => {
     mockGetUser.mockResolvedValue({
       data: { user: { id: "123", email: "manager@example.com" } },
       error: null,
@@ -149,7 +150,59 @@ describe("Navbar", () => {
       { timeout: 3000 },
     );
 
+    expect(screen.getByText("Manager")).toBeInTheDocument();
     expect(screen.getByText("API Docs")).toBeInTheDocument();
+  });
+
+  it("Manager link has correct href for bank_manager role", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "123", email: "manager@example.com" } },
+      error: null,
+    });
+
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: {
+          access_token: "token123",
+          refresh_token: "refresh",
+          expires_in: 3600,
+          expires_at: Date.now() + 3600000,
+          token_type: "bearer",
+          user: {
+            id: "123",
+            email: "manager@example.com",
+            aud: "authenticated",
+            role: "authenticated",
+            created_at: new Date().toISOString(),
+          },
+        },
+      },
+      error: null,
+    });
+
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        user: {
+          id: 1,
+          role: "bank_manager",
+          username: "manager",
+          email: "manager@example.com",
+        },
+      }),
+    } as Response);
+
+    render(<Navbar />);
+
+    await waitFor(
+      () => {
+        expect(screen.getByText("Manager")).toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
+
+    const managerLink = screen.getByRole("link", { name: "Manager" });
+    expect(managerLink).toHaveAttribute("href", "/manager");
   });
 
   it("does not display navigation links when user is not authenticated", async () => {
@@ -167,6 +220,7 @@ describe("Navbar", () => {
       { timeout: 1000 },
     );
 
+    expect(screen.queryByText("Manager")).not.toBeInTheDocument();
     expect(screen.queryByText("API Docs")).not.toBeInTheDocument();
   });
 
@@ -211,7 +265,8 @@ describe("Navbar", () => {
       { timeout: 3000 },
     );
 
-    // But role-specific links like API Docs should not appear without profile
+    // But role-specific links like Manager and API Docs should not appear without profile
+    expect(screen.queryByText("Manager")).not.toBeInTheDocument();
     expect(screen.queryByText("API Docs")).not.toBeInTheDocument();
   });
 

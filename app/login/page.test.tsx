@@ -4,6 +4,11 @@ import LoginPage from "./page";
 vi.mock("@/utils/supabase/client", () => ({
   createClient: () => ({
     auth: {
+      getUser: () =>
+        Promise.resolve({
+          data: { user: null },
+          error: null,
+        }),
       signInWithPassword: () => Promise.resolve({ data: {}, error: null }),
     },
   }),

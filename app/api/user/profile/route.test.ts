@@ -24,6 +24,10 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
   revalidateTag: vi.fn(),
+  unstable_cache: vi.fn((fn) => {
+    // Return the function directly for testing
+    return async () => await fn();
+  }),
 }));
 
 import { getAuthUserFromRequest } from "@/lib/auth";
@@ -88,7 +92,10 @@ describe("GET /api/user/profile", () => {
       supabaseUser: { id: "user-123" },
     } as never);
 
-    mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+    // First call: get dbUser.id, second call: get full user profile (from cache function)
+    mockPrisma.user.findUnique
+      .mockResolvedValueOnce({ id: 1 }) // For cache key
+      .mockResolvedValueOnce(mockUser); // For cached profile
 
     const request = new Request("http://localhost:3000/api/user/profile");
     const response = await GET(request);

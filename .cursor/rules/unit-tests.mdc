@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+always create unit tests per files worked on

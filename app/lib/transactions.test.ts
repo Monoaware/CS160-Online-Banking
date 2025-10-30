@@ -314,6 +314,7 @@ describe("Transaction Library Helpers", () => {
       expect(result).toEqual({
         success: true,
         message: "Deposit successful",
+        transaction: { id: 1 },
       });
       expect(mockCreate).toHaveBeenCalledWith({
         data: {
@@ -332,9 +333,12 @@ describe("Transaction Library Helpers", () => {
         },
       );
       const mockCreate = vi.fn().mockRejectedValue(error);
+      const mockExistingTransaction = { id: 1, status: "approved" };
+      const mockFindFirst = vi.fn().mockResolvedValue(mockExistingTransaction);
       const mockTx = {
         transaction: {
           create: mockCreate,
+          findFirst: mockFindFirst,
         },
       };
 
@@ -356,6 +360,7 @@ describe("Transaction Library Helpers", () => {
         success: true,
         message: "Deposit successful (idempotency key found).",
         duplicate: true,
+        transaction: mockExistingTransaction,
       });
     });
 

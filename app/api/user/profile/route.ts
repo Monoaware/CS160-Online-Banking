@@ -1,11 +1,7 @@
 import { getPrisma } from "@/app/lib/prisma";
 import { getAuthUserFromRequest } from "@/lib/auth";
-import { revalidatePath, revalidateTag } from "next/cache";
 import { UpdateProfileSchema } from "@/lib/schemas/user";
-
-// Configure route segment
-export const dynamic = "force-dynamic"; // Always fetch fresh data
-export const revalidate = 0; // Don't cache
+import { unstable_cache } from "next/cache";
 
 /**
  * @swagger
@@ -57,9 +53,41 @@ export async function GET(request: Request) {
     });
   }
 
-  const currentUser = await getPrisma().user.findUnique({
+  // Get database user ID for cache key
+  const prisma = getPrisma();
+  const dbUser = await prisma.user.findUnique({
     where: { auth_user_id: auth.supabaseUser.id },
+    select: { id: true },
   });
+
+  if (!dbUser) {
+    return new Response(JSON.stringify({ message: "User not onboarded" }), {
+      headers: { "Content-Type": "application/json" },
+      status: 404,
+    });
+  }
+
+  // Fetch with caching
+  // Cache tags: user-{supabaseUserId} and user-{dbUserId} for granular invalidation
+  const getCachedUserProfile = unstable_cache(
+    async () => {
+      return prisma.user.findUnique({
+        where: { auth_user_id: auth.supabaseUser.id },
+      });
+    },
+    [`profile-${auth.supabaseUser.id}-${dbUser.id}`],
+    {
+      tags: [
+        `user-${auth.supabaseUser.id}`,
+        `user-${dbUser.id}`,
+        `profile-${auth.supabaseUser.id}`,
+        `profile-${dbUser.id}`,
+      ],
+      revalidate: 60, // Revalidate every 60 seconds (time-based)
+    },
+  );
+
+  const currentUser = await getCachedUserProfile();
 
   if (!currentUser) {
     return new Response(JSON.stringify({ message: "User not onboarded" }), {
@@ -71,7 +99,7 @@ export async function GET(request: Request) {
   return new Response(JSON.stringify({ user: currentUser }), {
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": "private, no-cache, no-store, must-revalidate",
+      // Cache headers removed since we're using Next.js cache
     },
   });
 }
@@ -247,10 +275,13 @@ export async function PUT(request: Request) {
   });
 
   // Invalidate caches after update
-  revalidatePath("/dashboard");
-  revalidatePath("/api/user/profile");
-  revalidateTag(`user-${currentUser.id}`);
-  revalidateTag(`user-${auth.supabaseUser.id}`);
+  const { revalidatePath, revalidateTag } = await import("next/cache");
+  await revalidateTag(`user-${auth.supabaseUser.id}`);
+  await revalidateTag(`user-${currentUser.id}`);
+  await revalidateTag(`profile-${auth.supabaseUser.id}`);
+  await revalidateTag(`profile-${currentUser.id}`);
+  await revalidatePath("/dashboard");
+  await revalidatePath("/api/user/profile");
 
   return new Response(JSON.stringify({ user: updatedUser }), {
     headers: {

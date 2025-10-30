@@ -170,14 +170,7 @@ describe("GET /api/transactions", () => {
 
     expect(response.status).toBe(200);
     expect(data.transactions).toEqual([]);
-    expect(mockPrisma.transaction.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          internal_account_id: {
-            in: [],
-          },
-        },
-      }),
-    );
+    // When user has no accounts, findMany is not called (early return)
+    expect(mockPrisma.transaction.findMany).not.toHaveBeenCalled();
   });
 });

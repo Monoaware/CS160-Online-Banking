@@ -1,0 +1,4 @@
+---
+alwaysApply: true
+---
+don't use pnpm format:fix, fix files manually

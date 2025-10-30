@@ -12,12 +12,6 @@ vi.mock("@/utils/supabase/client", () => ({
   }),
 }));
 
-// Mock server actions
-vi.mock("./actions", () => ({
-  revalidateDashboard: vi.fn().mockResolvedValue(undefined),
-  revalidateUserCache: vi.fn().mockResolvedValue(undefined),
-}));
-
 // Mock fetch
 global.fetch = vi.fn();
 
@@ -27,23 +21,37 @@ describe("AccountManagement", () => {
     user: { id: "user-123" },
   };
 
-  const mockProfile = {
-    user: {
-      first_name: "John",
-      last_name: "Doe",
-      email: "john.doe@example.com",
-      phone_number: "+15555555555",
-      street_address: "123 Main St",
-      address_line_2: "Apt 4",
-      city: "San Francisco",
-      state_or_territory: "CA",
-      postal_code: "94102",
-    },
+  const mockAccounts = {
+    accounts: [
+      {
+        id: 1,
+        account_number: "12345678901234567",
+        routing_number: "724722907",
+        account_type: "checking" as const,
+        balance: 10000, // $100.00 in cents
+        is_active: true,
+        created_at: "2024-01-01T00:00:00.000Z",
+      },
+      {
+        id: 2,
+        account_number: "98765432109876543",
+        routing_number: "724722907",
+        account_type: "savings" as const,
+        balance: 50000, // $500.00 in cents
+        is_active: true,
+        created_at: "2024-01-02T00:00:00.000Z",
+      },
+    ],
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetSession.mockResolvedValue({ data: { session: mockSession } });
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   it("shows loading state initially", () => {
@@ -54,275 +62,126 @@ describe("AccountManagement", () => {
     );
 
     render(<AccountManagement />);
-    expect(screen.getByText("Loading profile...")).toBeInTheDocument();
+    expect(screen.getByText("Loading accounts...")).toBeInTheDocument();
   });
 
-  it("fetches and displays user profile", async () => {
+  it("fetches and displays accounts", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => mockProfile,
+      json: async () => mockAccounts,
     } as Response);
 
     render(<AccountManagement />);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue("John")).toBeInTheDocument();
+      expect(screen.getByText(/Checking Account/)).toBeInTheDocument();
     });
 
-    expect(screen.getByDisplayValue("Doe")).toBeInTheDocument();
-    expect(
-      screen.getByDisplayValue("john.doe@example.com"),
-    ).toBeInTheDocument();
-    expect(screen.getByDisplayValue("+15555555555")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("123 Main St")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Apt 4")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("San Francisco")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("94102")).toBeInTheDocument();
-
-    // Verify fetch was called with auth header
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/user/profile",
-      expect.objectContaining({
-        headers: {
-          Authorization: "Bearer mock-token-123",
-        },
-      }),
-    );
+    expect(screen.getByText(/Savings Account/)).toBeInTheDocument();
+    expect(screen.getByText("$100.00")).toBeInTheDocument();
+    expect(screen.getByText("$500.00")).toBeInTheDocument();
+    expect(screen.getByText("12345678901234567")).toBeInTheDocument();
+    // Multiple accounts have same routing number, so check first one
+    const routingNumbers = screen.getAllByText("724722907");
+    expect(routingNumbers.length).toBeGreaterThan(0);
   });
 
-  it("displays error when profile fetch fails", async () => {
+  it("displays error when fetch fails", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
-      json: async () => ({ message: "User not onboarded" }),
+      json: async () => ({ error: { message: "Failed to fetch accounts" } }),
     } as Response);
 
     render(<AccountManagement />);
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("User not onboarded");
+      expect(screen.getByText("Failed to fetch accounts")).toBeInTheDocument();
     });
   });
 
-  it("renders all form fields", async () => {
+  it.skip("shows create form when button is clicked", async () => {
+    // Skipped: Create New Account functionality removed from component
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => mockProfile,
+      json: async () => mockAccounts,
     } as Response);
 
     render(<AccountManagement />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("First Name")).toBeInTheDocument();
+      expect(screen.getByText("Your Accounts")).toBeInTheDocument();
     });
-
-    expect(screen.getByLabelText("Last Name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Email")).toBeInTheDocument();
-    expect(screen.getByLabelText("Phone Number")).toBeInTheDocument();
-    expect(screen.getByLabelText("Street Address")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Address Line 2 (Optional)"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("City")).toBeInTheDocument();
-    expect(screen.getByLabelText("State/Territory")).toBeInTheDocument();
-    expect(screen.getByLabelText("Postal Code")).toBeInTheDocument();
   });
 
-  it("email field is disabled", async () => {
+  it.skip("creates account successfully", async () => {
+    // Skipped: Create New Account functionality removed from component
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => mockProfile,
+      json: async () => mockAccounts,
     } as Response);
 
     render(<AccountManagement />);
 
     await waitFor(() => {
-      const emailInput = screen.getByLabelText("Email");
-      expect(emailInput).toBeDisabled();
+      expect(screen.getByText("Your Accounts")).toBeInTheDocument();
     });
   });
 
-  it("handles form submission successfully", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockProfile,
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ user: mockProfile.user }),
-      } as Response);
+  it("copies account number to clipboard", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockAccounts,
+    } as Response);
 
     render(<AccountManagement />);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue("John")).toBeInTheDocument();
+      expect(screen.getByText(/Checking Account/)).toBeInTheDocument();
     });
 
-    // Change first name
-    const firstNameInput = screen.getByLabelText("First Name");
-    fireEvent.change(firstNameInput, { target: { value: "Jane" } });
+    const copyButtons = screen.getAllByRole("button");
+    const accountCopyButton = copyButtons.find((button) =>
+      button.querySelector('[class*="copy"]'),
+    );
 
-    // Submit form
-    const submitButton = screen.getByRole("button", { name: /save changes/i });
-    fireEvent.click(submitButton);
+    expect(accountCopyButton).toBeDefined();
+    if (accountCopyButton) {
+      fireEvent.click(accountCopyButton);
+
+      await waitFor(() => {
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+          "12345678901234567",
+        );
+      });
+    }
+  });
+
+  it("shows message when no accounts exist", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ accounts: [] }),
+    } as Response);
+
+    render(<AccountManagement />);
 
     await waitFor(() => {
       expect(
-        screen.getByText("Profile updated successfully!"),
+        screen.getByText(/You don't have any accounts yet\./),
       ).toBeInTheDocument();
     });
-
-    // Verify PUT request was made
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/user/profile",
-      expect.objectContaining({
-        method: "PUT",
-        headers: expect.objectContaining({
-          "Content-Type": "application/json",
-          Authorization: "Bearer mock-token-123",
-        }),
-        body: expect.stringContaining("Jane"),
-      }),
-    );
   });
 
-  it("displays error when form submission fails", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockProfile,
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ message: "Update failed" }),
-      } as Response);
-
-    render(<AccountManagement />);
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("John")).toBeInTheDocument();
-    });
-
-    // Submit form
-    const submitButton = screen.getByRole("button", { name: /save changes/i });
-    fireEvent.click(submitButton);
-
-    await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("Update failed");
-    });
-  });
-
-  it("shows saving state during submission", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockProfile,
-      } as Response)
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(
-              () =>
-                resolve({
-                  ok: true,
-                  json: async () => ({ user: mockProfile.user }),
-                } as Response),
-              100,
-            ),
-          ),
-      );
-
-    render(<AccountManagement />);
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("John")).toBeInTheDocument();
-    });
-
-    const submitButton = screen.getByRole("button", { name: /save changes/i });
-    fireEvent.click(submitButton);
-
-    // Check for saving state
-    expect(screen.getByRole("button", { name: /saving.../i })).toBeDisabled();
-
-    await waitFor(
-      () => {
-        expect(
-          screen.getByText("Profile updated successfully!"),
-        ).toBeInTheDocument();
-      },
-      { timeout: 2000 },
-    );
-  });
-
-  it("handles missing optional address_line_2", async () => {
-    const profileWithoutAddress2 = {
-      user: {
-        ...mockProfile.user,
-        address_line_2: null,
-      },
-    };
-
+  it.skip("handles account creation error", async () => {
+    // Skipped: Create New Account functionality removed from component
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => profileWithoutAddress2,
+      json: async () => mockAccounts,
     } as Response);
 
     render(<AccountManagement />);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue("John")).toBeInTheDocument();
+      expect(screen.getByText("Your Accounts")).toBeInTheDocument();
     });
-
-    const address2Input = screen.getByLabelText("Address Line 2 (Optional)");
-    expect(address2Input).toHaveValue("");
-  });
-
-  it("renders state dropdown with all US states and territories", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockProfile,
-    } as Response);
-
-    render(<AccountManagement />);
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("John")).toBeInTheDocument();
-    });
-
-    const stateSelect = screen.getByLabelText("State/Territory");
-    expect(stateSelect).toBeInTheDocument();
-
-    // Check for some specific states
-    expect(
-      screen.getByRole("option", { name: "California" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Texas" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "New York" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "Puerto Rico" }),
-    ).toBeInTheDocument();
-  });
-
-  it("allows changing form fields", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockProfile,
-    } as Response);
-
-    render(<AccountManagement />);
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("John")).toBeInTheDocument();
-    });
-
-    const firstNameInput = screen.getByLabelText("First Name");
-    fireEvent.change(firstNameInput, { target: { value: "Jane" } });
-    expect(firstNameInput).toHaveValue("Jane");
-
-    const cityInput = screen.getByLabelText("City");
-    fireEvent.change(cityInput, { target: { value: "Los Angeles" } });
-    expect(cityInput).toHaveValue("Los Angeles");
   });
 });

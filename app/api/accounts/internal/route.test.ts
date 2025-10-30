@@ -23,6 +23,12 @@ vi.mock("@/lib/auth", () => ({
   getAuthUserFromRequest: vi.fn(),
 }));
 
+// Mock next/cache
+vi.mock("next/cache", () => ({
+  revalidateTag: vi.fn(),
+  revalidatePath: vi.fn(),
+}));
+
 describe("POST /api/accounts/internal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
