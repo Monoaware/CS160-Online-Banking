@@ -33,11 +33,13 @@ export async function createDeniedTransaction(
     idempotency_key?: string | null;
     bill_pay_rule_id?: number;
     transfer_rule_id?: number;
+    check_number?: string | null;
   },
 ) {
   return await tx.transaction.create({
     data: {
       ...data,
+      check_number: data.check_number ?? null,
       status: "denied" as const,
     },
   });
@@ -54,23 +56,33 @@ export async function findExistingTransaction(
     amount: Decimal;
     bill_pay_rule_id?: number;
     transfer_rule_id?: number;
+    check_number?: string | null;
   },
 ) {
-  if (!params.idempotency_key) return null;
+  if (!params.idempotency_key && !params.check_number) return null;
+
+  const baseWhere: Record<string, unknown> = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    transaction_type: params.transaction_type as any,
+    internal_account_id: params.internal_account_id,
+    amount: params.amount,
+    ...(params.bill_pay_rule_id && {
+      bill_pay_rule_id: params.bill_pay_rule_id,
+    }),
+    ...(params.transfer_rule_id && {
+      transfer_rule_id: params.transfer_rule_id,
+    }),
+  };
+
+  const orClauses: Record<string, unknown>[] = [];
+  if (params.idempotency_key)
+    orClauses.push({ idempotency_key: params.idempotency_key });
+  if (typeof params.check_number === "string")
+    orClauses.push({ check_number: params.check_number });
 
   return await tx.transaction.findFirst({
     where: {
-      idempotency_key: params.idempotency_key,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      transaction_type: params.transaction_type as any,
-      internal_account_id: params.internal_account_id,
-      amount: params.amount,
-      ...(params.bill_pay_rule_id && {
-        bill_pay_rule_id: params.bill_pay_rule_id,
-      }),
-      ...(params.transfer_rule_id && {
-        transfer_rule_id: params.transfer_rule_id,
-      }),
+      AND: [baseWhere, { OR: orClauses }],
     },
   });
 }
@@ -85,6 +97,7 @@ export async function createApprovedTransaction(
     transaction_type: string;
     direction: string;
     idempotency_key?: string | null;
+    check_number?: string | null;
     bill_pay_rule_id?: number;
     transfer_rule_id?: number;
   },
@@ -94,6 +107,7 @@ export async function createApprovedTransaction(
     await tx.transaction.create({
       data: {
         ...data,
+        check_number: data.check_number ?? null,
         status: "approved" as const,
       },
     });

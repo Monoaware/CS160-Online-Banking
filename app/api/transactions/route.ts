@@ -22,6 +22,7 @@ const Deposit = z.object({
   transaction_direction: z.literal("inbound"),
   destination_account_number: z.string().min(1),
   requested_amount: Amount,
+  check_number: z.string().optional(),
 });
 
 const Withdrawal = z.object({
@@ -488,6 +489,12 @@ async function handleDeposit(
 ) {
   const { destination_account_number, requested_amount } = request_body;
 
+  // Read in forwarded check ID:
+  const checkNumberFromRequest: string | null =
+    typeof request_body.check_number === "string"
+      ? request_body.check_number
+      : null;
+
   return await prisma.$transaction(async (tx) => {
     const account = await tx.internalAccount.findUnique({
       where: { account_number: destination_account_number },
@@ -513,6 +520,7 @@ async function handleDeposit(
         transaction_type: "deposit",
         direction: "inbound",
         idempotency_key,
+        check_number: checkNumberFromRequest ?? null,
       });
       return json(403, {
         error: "Forbidden: Destination account is inactive.",
@@ -544,6 +552,7 @@ async function handleDeposit(
         transaction_type: "deposit",
         direction: "inbound",
         idempotency_key,
+        check_number: checkNumberFromRequest ?? null,
       },
       "Deposit already processed",
     );

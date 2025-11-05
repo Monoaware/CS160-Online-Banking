@@ -147,7 +147,7 @@ model Transaction {
   amount           Decimal               @db.Decimal(19, 4)
   status           TransactionStatusEnum
   transaction_type TransactionTypeEnum
-  check_number     String?               @db.VarChar(12) // MICR value (routing number + account number + check number)
+  check_number     String?               
 
   // Which internal account moved the money? (source -> OUTBOUND, destination -> INBOUND)
   internal_account_id Int
